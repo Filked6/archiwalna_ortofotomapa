@@ -30,16 +30,16 @@ from qgis.PyQt import uic
 from datetime import datetime
 from qgis.core import QgsSettings
 from .qgis_feed import QgisFeedDialog
-# Initialize Qt resources from file resources.py
-from .resources import *
+# Inicjalizuje zasoby QT z pliku resources.py
+from .resources import *  # noqa: F403
 from qgis.core import QgsRasterLayer, QgsProject, Qgis, QgsNetworkAccessManager
-# Import the code for the DockWidget
+# Import kodu dla dockwidget
 from .archiwalna_ortofotomapa_dockwidget import ArchiwalnaOrtofotomapaDockWidget
 import os.path
 from . import PLUGIN_VERSION as plugin_version
 from .utils import MessageUtils, QtUtils
 from . import PLUGIN_NAME as plugin_name
-from .constants import ORTO_SERVICE_URL, WMS_BASE_PARAMS, WMS_TIME_SUFFIX, INITIAL_SCALE
+from .constants import ORTO_SERVICE_URL, WMS_BASE_PARAMS, WMS_TIME_SUFFIX, INITIAL_SCALE, INDUSTRIES
 
 
 
@@ -55,13 +55,24 @@ class ArchiwalnaOrtofotomapa:
         :type iface: QgsInterface
         """
 
+        # Zachowanie referencji do okienka QGIS
+        # (przed QGIS Feed - okno wyboru branzy potrzebuje iface.mainWindow() jako rodzica)
+        self.iface = iface
+
         if not is_tested:
-            self.settings = QgsSettings() 
+            self.settings = QgsSettings()
 
             if Qgis.QGIS_VERSION_INT >= 31000:
                 from .qgis_feed import QgisFeed
+
+                # qgis feed
                 self.selected_industry = self.settings.value("selected_industry", None)
                 show_dialog = self.settings.value("showDialog", True, type=bool)
+
+                # Wczytywanie branzy jezeli nie jest zgodna z aktualnym slownikiem
+                if self.selected_industry not in INDUSTRIES.values():
+                    self.selected_industry = None
+                    show_dialog = True
 
                 if self.selected_industry is None and show_dialog:
                     self.showBranchSelectionDialog()
@@ -71,17 +82,14 @@ class ArchiwalnaOrtofotomapa:
                 self.feed = QgisFeed(selected_industry=select_indust_session, plugin_name=plugin_name)
                 self.feed.initFeed()
 
-        # Save reference to the QGIS interface
-        self.iface = iface
-
         self.project = QgsProject.instance()
         self.nam = QgsNetworkAccessManager.instance()
 
-        # initialize plugin directory
+        # Inicjalizacja sciezki wtyczki
         self.plugin_dir = os.path.dirname(__file__)
 
         if not is_tested:
-            # initialize locale
+            # Inicjalizacja ustawien lokalnych
             locale = QSettings().value('locale/userLocale')[0:2]
             locale_path = os.path.join(
                 self.plugin_dir,
@@ -93,10 +101,10 @@ class ArchiwalnaOrtofotomapa:
                 self.translator.load(locale_path)
                 QCoreApplication.installTranslator(self.translator)
 
-            # Declare instance attributes
+            # Deklaracja atrybutow instancji
             self.actions = []
             self.menu = self.tr(u'&EnviroSolutions')
-            # TODO: We are going to let the user set this up in a future iteration
+            # TODO: W przyszlosci uzytkownik bedzie sam mogl to ustawic
             self.toolbar = self.iface.mainWindow().findChild(QToolBar, 'EnviroSolutions')
             if not self.toolbar:
                 self.toolbar = self.iface.addToolBar(u'EnviroSolutions')
@@ -104,14 +112,14 @@ class ArchiwalnaOrtofotomapa:
 
             self.pluginIsActive = False
             
-            # Create the dockwidget and keep reference
+            # Tworzenie dockwidget i zachowanie referencji
             self.dockwidget = ArchiwalnaOrtofotomapaDockWidget()
             
-            # Connect to slider signals directly (once during initialization)
-            self.dockwidget.timeSlider.valueChanged.connect(self.sliderChanged)
-            self.dockwidget.timeSlider.sliderReleased.connect(self.sliderReleased)
-            self.dockwidget.timeSlider.sliderPressed.connect(self.sliderPressed)
-            self.dockwidget.timeSlider.sliderMoved.connect(self.sliderMoved)
+            # Bezposrednie podlaczenie do slider'a (raz na inicjalizacje)
+            self.dockwidget.time_slider.valueChanged.connect(self.sliderChanged)
+            self.dockwidget.time_slider.sliderReleased.connect(self.sliderReleased)
+            self.dockwidget.time_slider.sliderPressed.connect(self.sliderPressed)
+            self.dockwidget.time_slider.sliderMoved.connect(self.sliderMoved)
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
 
             self.canvas = self.iface.mapCanvas()
@@ -119,10 +127,10 @@ class ArchiwalnaOrtofotomapa:
 
         # --------------------------------------------------------------------------
 
-
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
-        """Get the translation for a string using Qt translation API.
+        """
+        Get the translation for a string using Qt translation API.
 
         We implement this ourselves since we do not inherit QObject.
 
@@ -146,9 +154,11 @@ class ArchiwalnaOrtofotomapa:
         add_to_toolbar=True,
         status_tip=None,
         whats_this=None,
-        parent=None):
+        parent=None
+    ):
 
-        """Add a toolbar icon to the toolbar.
+        """
+        Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
             path (e.g. ':/plugins/foo/bar.png') or a normal file system path.
@@ -212,7 +222,9 @@ class ArchiwalnaOrtofotomapa:
 
 
     def initGui(self):
-        """Create the menu entries and toolbar icons inside the QGIS GUI."""    
+        """
+        Tworzy pozcyje menu i ikony paska narzedzi w interfejsie QGIS
+        """    
         
         icon_path = ':/plugins/archiwalna_ortofotomapa/icons/archiwalna_logo.svg'
         self.addAction(
@@ -224,15 +236,17 @@ class ArchiwalnaOrtofotomapa:
 
 
     def onClosePlugin(self):
-        """Cleanup necessary items here when plugin dockwidget is closed"""
+        """
+        Sprzata niepotrzebne elementy po zamknieciu dockwidgetu
+        """
 
-        # disconnects
-        #self.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
+        # Odlaczenie sygnalow
+        # self.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
 
-        # remove this statement if dockwidget is to remain
-        # for reuse if plugin is reopened
-        # Commented next statement since it causes QGIS crashe
-        # when closing the docked window:
+        # Instrukcja do usuniecia jesli dockwidget pozostaje
+        # Do ponownego uzycia po ponownym otwarciu wtyczki
+        # Zakomentowane ze wzgledu na wywolywanie awari w QGIS
+        # Przy zamykaniu zadockowanego okna:
         # self.dockwidget = None
         MessageUtils.pushLogInfo("Wtyczka nieaktywna")
 
@@ -240,54 +254,54 @@ class ArchiwalnaOrtofotomapa:
 
 
     def unload(self):
-        """Removes the plugin menu item and icon from QGIS GUI."""
+        """
+        Usuwa menu wtyczki i ikonke z interfejsu QGIS
+        """
 
         for action in self.actions:
             self.iface.removePluginMenu(
                 self.tr(u'&EnviroSolutions'),
                 action)
-            #self.iface.removeToolBarIcon(action)
+            # self.iface.removeToolBarIcon(action)
             self.toolbar.removeAction(action)
-        # remove the toolbar
+        # Usuwa pasek narzedzi
         del self.toolbar
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
 
     def run(self):
         """Run method that loads and starts the plugin"""
         
-        # Increase network timeout to 2 minutes (120000 ms)
+        # Zwiekszenie czasu timeout do 2 minut (120000 ms)
         self.nam.setTimeout(120000)
 
         if not self.pluginIsActive:
             self.pluginIsActive = True
-            #print "** STARTING ArchiwalnaOrtofotomapa"
+            # print "** STARTING ArchiwalnaOrtofotomapa"
             if self.orto:
                 self.orto.willBeDeleted.disconnect()
                 self.project.removeMapLayer(self.orto)
                 self.orto = None
             
-            # Set slider to max year every time plugin is launched
+            # Ustawia slider na maksymalny rok po kazdym uruchomieniu
             self.dockwidget.setSliderToMaxYear()
 
-            # Version info
+            # Informacje o wersji
             self.dockwidget.setWindowTitle('%s %s' % (plugin_name, plugin_version))
-            self.dockwidget.lbl_pluginVersion.setText('%s %s' % (plugin_name, plugin_version))
+            self.dockwidget.lbl_pluginVersion.setText('%s %s' % ("Archiwalne ortofotomapy z geoportal.gov.pl ·", plugin_version))
 
-            # show the dockwidget
-            # TODO: fix to allow choice of dock location
-            if QtUtils.isCompatibleQtVersion(QT_VERSION_STR, 6):
-                dock_location = Qt.DockWidgetArea.LeftDockWidgetArea
-            else:
-                dock_location = Qt.LeftDockWidgetArea
+            # Pokazywanie dockwidgetu
+            # TODO: Nalezy to naprawic, aby pokazywalo lokalizacje docku
+            dock_location = Qt.DockWidgetArea.LeftDockWidgetArea
+ 
             
             self.iface.addDockWidget(dock_location, self.dockwidget)
             self.dockwidget.show()
             MessageUtils.pushLogInfo("Dockwidget ustawiony")
 
-            self.orto = QgsRasterLayer(self.makeDataSourceUri(self.dockwidget.timeSlider.value()),
-                                       "Ortofotomapa Archiwalna %d" % self.dockwidget.timeSlider.value(),
+            self.orto = QgsRasterLayer(self.makeDataSourceUri(self.dockwidget.time_slider.value()),
+                                       "Ortofotomapa Archiwalna %d" % self.dockwidget.time_slider.value(),
                                        'wms')
             self.orto.willBeDeleted.connect(self.ortoRemoval)
             if not self.orto.isValid():
@@ -302,29 +316,32 @@ class ArchiwalnaOrtofotomapa:
             else:
                 MessageUtils.pushLogWarning("Błąd: Warstwa nie została dodana do projektu")
 
-            # Match initial zoom scale after a short delay to ensure layer is fully loaded
+            # Dopasowywanie do poczatkowego zoom'a po krotkim opoznieniu, aby upewnic sie ze sie zaladowalo
             QTimer.singleShot(500, self.applyInitialScale)
 
         else:
-            #reopened
+            # reopened
             pass
 
     def applyInitialScale(self):
-        """Sets canvas scale without changing the current map center."""
+        """
+        Ustawia skale okna bez zmiany centrum mapy
+        """
         self.canvas.zoomScale(INITIAL_SCALE)
         self.canvas.refresh()
 
     def showBranchSelectionDialog(self):
-        self.qgisfeed_dialog = QgisFeedDialog()
-
-        if self.qgisfeed_dialog.exec() == QDialog.Accepted:
-            self.selected_branch = self.qgisfeed_dialog.comboBox.currentText()
-            
-            self.settings.setValue("selected_industry", self.selected_branch)  
-            self.settings.setValue("showDialog", False) 
+        """
+        Wyswietla dialog wyboru branzy dla QGIS Feed
+        """
+        dialog = QgisFeedDialog(self.iface.mainWindow())
+        dialog.exec()
+        self.selected_industry = self.settings.value("selected_industry", None)
 
     def ortoRemoval(self):
-        """Function to remove the dockwidget and the orto layer when the layer is deleted"""
+        """
+        Funkcja usuwajaca dockwidget i ortofotomape kiedy warstwa zostanie usunieta
+        """
         
         MessageUtils.pushLogInfo("Ortofotomapa usunięta")
         self.dockwidget.close()
@@ -332,10 +349,12 @@ class ArchiwalnaOrtofotomapa:
 
 
     def sliderChanged(self):
-        """Function to update the label with the current year"""
+        """
+        Funkcja do aktualizacji labeli z aktualnym rokiem
+        """
 
-        # Update the label with current year
-        self.dockwidget.timeLabel.setText(str(self.dockwidget.timeSlider.value()))
+        # Aktualizacja aktualnym rokiem
+        self.dockwidget.timeLabel.setText(str(self.dockwidget.time_slider.value()))
         
         if self.orto is None:
             return
@@ -344,26 +363,34 @@ class ArchiwalnaOrtofotomapa:
             self.changeOrtoLayer()
 
     def sliderMoved(self):
-        """Function to do nothing if the slider is moved"""
+        """
+        Kiedy przesuwane jest okienko to funkcja nic nie robi
+        """
         pass
 
 
     def sliderPressed(self):
-        """Function to control the parameter responsible for actions after clicking the slider"""
+        """
+        Funkcja do kontrolowania parametru odpowiedzialnego za akcje podczas trzymania na slider
+        """
         self.dockwidget.isSliderPressed = True
 
 
     def sliderReleased(self):
-        """Function to control the parameter responsible for actions after releasing the slider"""
+        """
+        Funkcja do kontrolowania parametru odpowiedzialnego za akcje po puszczeniu slider'a        
+        """
         self.dockwidget.isSliderPressed = False
         MessageUtils.pushLogInfo("Slider puszczony")
         self.changeOrtoLayer()
 
 
     def changeOrtoLayer(self):
-        """Function to change the name of the orto layer after changing the year"""
+        """
+        Funkcja do zmiany nazwy warstwy po tym jak zostal zmieniony rok
+        """
 
-        year = self.dockwidget.timeSlider.value()
+        year = self.dockwidget.time_slider.value()
         uri = self.makeDataSourceUri(year)
         self.orto.dataProvider().setDataSourceUri(uri)
         self.orto.triggerRepaint()
@@ -373,6 +400,8 @@ class ArchiwalnaOrtofotomapa:
 
 
     def makeDataSourceUri(self, year):
-        """Function to edit the orto layer and change the year it is based on"""
+        """
+        Funkcja do edycji warsty ortofotomapy i zmiany roku, na ktorym bazuje
+        """
         
         return WMS_BASE_PARAMS + ORTO_SERVICE_URL + "?TIME=" + str(year) + WMS_TIME_SUFFIX
